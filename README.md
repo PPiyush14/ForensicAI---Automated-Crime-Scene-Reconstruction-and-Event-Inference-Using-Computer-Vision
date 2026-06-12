@@ -1,4 +1,4 @@
-# 🔍 ForensicAI — Automated Crime Scene Reconstruction & Event Inference
+#  ForensicAI — Automated Crime Scene Reconstruction & Event Inference
 
 > An AI-powered forensic analysis system that detects evidence from crime scene images using computer vision and generates structured event reconstructions using large language models.
 
@@ -10,7 +10,7 @@
 
 ---
 
-## 🧠 What It Does
+##  What It Does
 
 Upload a crime scene image and the system will:
 
@@ -20,7 +20,7 @@ Upload a crime scene image and the system will:
 
 ---
 
-## 🏗️ Architecture
+##  Architecture
 
 ```
 Image Input
@@ -46,7 +46,7 @@ Image Input
 
 ---
 
-## 🛠️ Tech Stack
+##  Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
@@ -58,7 +58,7 @@ Image Input
 
 ---
 
-## 🔎 Detection Stack
+##  Detection Stack
 
 | Priority | Model | Detects |
 |----------|-------|---------|
@@ -69,7 +69,7 @@ Image Input
 
 ---
 
-## ⚡ Quick Start
+##  Quick Start
 
 ### 1. Clone the repo
 ```bash
@@ -108,7 +108,7 @@ Open **http://localhost:5000** in your browser.
 
 ---
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 ├── app.py                  # Flask app entry point
