@@ -127,7 +127,7 @@ Open **http://localhost:5000** in your browser.
 
 ---
 
-## 🤖 Why Groq + LLaMA-4 Scout?
+##  Why Groq + LLaMA-4 Scout?
 
 | Service | Model | Vision | Free Tier |
 |---------|-------|--------|-----------|
@@ -139,7 +139,7 @@ Groq offers the fastest inference with full vision support and no hard daily lim
 
 ---
 
-## 👤 Author
+##  Author
 
 **Piyush Rajvaidya**  
 [![GitHub](https://img.shields.io/badge/GitHub-PPiyush14-black?logo=github)](https://github.com/PPiyush14)
