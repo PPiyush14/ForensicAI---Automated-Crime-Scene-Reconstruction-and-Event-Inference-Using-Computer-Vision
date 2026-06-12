@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crime Scene AI — Reconstruction & Event Inference</title>
+<style>
+  :root {
+    --bg: #0d0f14; --panel: #141720; --panel2: #1b1f2e;
+    --border: #252a3a; --accent: #f5c518; --red: #e53935;
+    --orange: #ff6d00; --yellow: #ffd600; --cyan: #00bcd4;
+    --text: #d0d6e8; --muted: #5a6080; --green: #00c853;
+    --critical: #e53935; --high: #ff6d00; --medium: #ffd600; --low: #00bcd4;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Courier New', monospace; min-height: 100vh; }
+
+  /* ── Header ── */
+  .header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 16px;
+  }
+  .logo { font-size: 1.5rem; font-weight: 900; color: var(--accent); letter-spacing: 3px; }
+  .logo-sub { font-size: 0.65rem; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+  .status-badge {
+    margin-left: auto; background: #0a2010; border: 1px solid var(--green);
+    color: var(--green); padding: 5px 14px; font-size: 0.7rem; letter-spacing: 2px; border-radius: 2px;
+  }
+  .status-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green); margin-right: 6px; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .warning-bar {
+    background: #1a0808; border-bottom: 1px solid #4a1515;
+    padding: 8px 24px; font-size: 0.7rem; color: #e07070; letter-spacing: 1px;
+    text-align: center;
+  }
+
+  /* ── Layout ── */
+  .main { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 82px); }
+  .left-panel { border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .right-panel { padding: 20px; overflow-y: auto; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 4px; padding: 16px;
+  }
+  .card-title {
+    font-size: 0.65rem; letter-spacing: 3px; color: var(--accent); text-transform: uppercase;
+    margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+  }
+  .card-title::before { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 4px; padding: 28px 16px;
+    text-align: center; cursor: pointer; transition: all 0.2s; position: relative;
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent); background: rgba(245,197,24,0.05);
+  }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon { font-size: 2rem; margin-bottom: 8px; }
+  .upload-label { font-size: 0.85rem; color: var(--text); font-weight: bold; }
+  .upload-hint  { font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+
+  .preview-wrap { margin-top: 10px; }
+  .preview-img  { width: 100%; border-radius: 3px; border: 1px solid var(--border); display: none; }
+  .preview-name { font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+
+  .btn-analyze {
+    width: 100%; padding: 14px; background: var(--accent); color: #000;
+    border: none; font-family: 'Courier New', monospace; font-size: 0.85rem;
+    font-weight: 900; letter-spacing: 3px; cursor: pointer; border-radius: 3px;
+    transition: all 0.2s; text-transform: uppercase;
+  }
+  .btn-analyze:hover:not(:disabled) { background: #ffd740; }
+  .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .model-info { font-size: 0.62rem; color: var(--muted); line-height: 1.8; }
+  .model-info span { color: var(--text); }
+
+  /* ── Right panel ── */
+  .placeholder {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    height: 60vh; color: var(--muted); gap: 12px; text-align: center;
+  }
+  .placeholder-icon { font-size: 4rem; opacity: 0.3; }
+  .placeholder-text { font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; }
+
+  /* ── Results header ── */
+  .results-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .case-id { font-size: 0.7rem; letter-spacing: 2px; color: var(--muted); }
+  .case-id span { color: var(--accent); }
+
+  .threat-badge {
+    padding: 10px 20px; border-radius: 3px; font-size: 1.1rem; font-weight: 900;
+    letter-spacing: 3px; text-transform: uppercase; border: 2px solid;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .threat-CRITICAL { background: rgba(229,57,53,0.15); border-color: var(--critical); color: var(--critical); }
+  .threat-HIGH     { background: rgba(255,109,0,0.15);  border-color: var(--high);     color: var(--high); }
+  .threat-MEDIUM   { background: rgba(255,214,0,0.15);  border-color: var(--medium);   color: var(--medium); }
+  .threat-LOW      { background: rgba(0,188,212,0.15);  border-color: var(--low);       color: var(--low); }
+
+  .sev-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sev-pill {
+    padding: 8px 16px; border-radius: 3px; font-size: 0.8rem; font-weight: 700;
+    text-align: center; min-width: 70px;
+  }
+  .sev-critical { background: rgba(229,57,53,0.2);  color: var(--critical); border: 1px solid var(--critical); }
+  .sev-high     { background: rgba(255,109,0,0.2);  color: var(--high);     border: 1px solid var(--high); }
+  .sev-medium   { background: rgba(255,214,0,0.2);  color: var(--medium);   border: 1px solid var(--medium); }
+  .sev-low      { background: rgba(0,188,212,0.2);  color: var(--low);       border: 1px solid var(--low); }
+  .sev-label    { font-size: 0.55rem; opacity: 0.7; display: block; }
+
+  /* ── Grid of images ── */
+  .img-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .img-card { position: relative; }
+  .img-card img { width: 100%; border-radius: 3px; border: 1px solid var(--border); display: block; }
+  .img-label {
+    position: absolute; bottom: 0; left: 0; right: 0; padding: 6px 10px;
+    background: rgba(0,0,0,0.75); font-size: 0.6rem; letter-spacing: 2px; color: var(--muted);
+    border-radius: 0 0 3px 3px;
+  }
+  .img-full { grid-column: 1 / -1; }
+
+  /* ── Detection list ── */
+  .det-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+  .det-item {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 3px;
+    padding: 10px 14px; display: flex; align-items: center; gap: 12px;
+  }
+  .det-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .det-name { font-weight: bold; font-size: 0.85rem; flex: 1; }
+  .det-tags { display: flex; gap: 6px; }
+  .tag {
+    padding: 2px 8px; font-size: 0.6rem; border-radius: 2px; letter-spacing: 1px;
+    text-transform: uppercase; font-weight: bold;
+  }
+  .tag-critical { background: rgba(229,57,53,0.25); color: var(--critical); }
+  .tag-high     { background: rgba(255,109,0,0.25);  color: var(--high); }
+  .tag-medium   { background: rgba(255,214,0,0.25);  color: var(--medium); }
+  .tag-low      { background: rgba(0,188,212,0.25);  color: var(--low); }
+  .tag-cat      { background: rgba(255,255,255,0.06); color: var(--muted); }
+  .det-conf { font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
+  .conf-bar { width: 80px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .conf-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
+
+  /* ── Events ── */
+  .events-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+  .event-item {
+    background: var(--panel2); border: 1px solid var(--border); border-radius: 3px; padding: 12px 14px;
+  }
+  .event-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .event-icon { color: var(--accent); }
+  .event-name { font-weight: bold; font-size: 0.9rem; flex: 1; }
+  .event-pct  { font-size: 0.75rem; color: var(--muted); }
+  .event-bar  { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 8px; }
+  .event-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+  .event-evid { display: flex; gap: 6px; flex-wrap: wrap; }
+  .evid-tag   { padding: 2px 8px; font-size: 0.6rem; background: rgba(255,255,255,0.06);
+    color: var(--muted); border-radius: 2px; letter-spacing: 1px; }
+
+  /* ── AI Analysis ── */
+  .ai-section { margin-bottom: 20px; }
+  .ai-header  {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    font-size: 0.65rem; letter-spacing: 3px; color: var(--cyan); text-transform: uppercase;
+  }
+  .ai-badge {
+    margin-left: auto; background: rgba(0,188,212,0.1); border: 1px solid var(--cyan);
+    color: var(--cyan); padding: 3px 10px; font-size: 0.6rem; border-radius: 2px; letter-spacing: 1px;
+  }
+  .ai-body {
+    background: var(--panel2); border: 1px solid var(--border); border-left: 3px solid var(--cyan);
+    border-radius: 0 3px 3px 0; padding: 16px; font-size: 0.8rem; line-height: 1.7;
+    white-space: pre-wrap;
+  }
+  .ai-body h2 {
+    color: var(--cyan); font-size: 0.75rem; letter-spacing: 2px;
+    text-transform: uppercase; margin: 14px 0 6px; border-bottom: 1px solid var(--border);
+    padding-bottom: 4px;
+  }
+  .ai-body h2:first-child { margin-top: 0; }
+  .ai-error {
+    background: rgba(229,57,53,0.08); border: 1px solid #4a1515;
+    border-left: 3px solid var(--red); border-radius: 0 3px 3px 0;
+    padding: 14px 16px; font-size: 0.78rem; color: #e07070;
+  }
+
+  /* ── Loading spinner ── */
+  .spinner-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(13,15,20,0.85);
+    z-index: 100; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+  }
+  .spinner-overlay.active { display: flex; }
+  .spinner {
+    width: 48px; height: 48px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner-text { font-size: 0.7rem; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; }
+
+  /* ── Print button ── */
+  .btn-print {
+    padding: 7px 16px; background: transparent; border: 1px solid var(--border);
+    color: var(--muted); font-family: 'Courier New', monospace; font-size: 0.7rem;
+    cursor: pointer; border-radius: 2px; letter-spacing: 1px; transition: all 0.2s;
+  }
+  .btn-print:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-new {
+    padding: 7px 16px; background: transparent; border: 1px solid var(--border);
+    color: var(--muted); font-family: 'Courier New', monospace; font-size: 0.7rem;
+    cursor: pointer; border-radius: 2px; letter-spacing: 1px; transition: all 0.2s;
+  }
+  .btn-new:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  @media print {
+    .left-panel, .spinner-overlay, .btn-print, .btn-new { display: none !important; }
+    .main { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 900px) {
+    .main { grid-template-columns: 1fr; }
+    .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+    .img-grid { grid-template-columns: 1fr; }
+    .img-full { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">FORENSIC AI</div>
+    <div class="logo-sub">Automated Reconstruction &amp; Event Inference System</div>
+  </div>
+  <div class="status-badge"><span class="status-dot"></span>SYSTEM ACTIVE</div>
+</div>
+<div class="warning-bar">
+  ⚠ FOR LAW ENFORCEMENT AND FORENSIC RESEARCH USE ONLY — AI ANALYSIS MUST BE VERIFIED BY QUALIFIED PROFESSIONALS
+</div>
+
+<div class="spinner-overlay" id="spinner">
+  <div class="spinner"></div>
+  <div class="spinner-text">Analyzing Evidence...</div>
+</div>
+
+<div class="main">
+  <!-- ── LEFT PANEL ── -->
+  <div class="left-panel">
+
+    <div class="card">
+      <div class="card-title">📤 Evidence Upload</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.webp,.bmp">
+        <div class="upload-icon">📸</div>
+        <div class="upload-label">Drop crime scene image here</div>
+        <div class="upload-hint">or click to browse</div>
+        <div class="upload-hint">Supports JPG, PNG, WEBP, BMP · Max 16MB</div>
+      </div>
+      <div class="preview-wrap">
+        <img class="preview-img" id="previewImg" alt="Preview">
+        <div class="preview-name" id="previewName"></div>
+      </div>
+    </div>
+
+    <button class="btn-analyze" id="analyzeBtn" disabled onclick="runAnalysis()">
+      🔬 BEGIN ANALYSIS
+    </button>
+
+    <div class="card model-info">
+      <div class="card-title">⚙ Detection Stack</div>
+      DETECTION MODEL<br><span>YOLOv8m + Custom (blood / weapon)</span><br><br>
+      INFERENCE ENGINE<br><span>Groq LLaMA-4 Scout Vision (Free)</span><br><br>
+      ROBOFLOW MODELS<br><span id="rfStatus">Optional Enhancement</span>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="right-panel" id="rightPanel">
+    <div class="placeholder" id="placeholder">
+      <div class="placeholder-icon">🔍</div>
+      <div class="placeholder-text">Upload a crime scene image to begin analysis</div>
+    </div>
+    <div id="results" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const fileInput   = document.getElementById('fileInput');
+const uploadZone  = document.getElementById('uploadZone');
+const previewImg  = document.getElementById('previewImg');
+const previewName = document.getElementById('previewName');
+const analyzeBtn  = document.getElementById('analyzeBtn');
+const spinner     = document.getElementById('spinner');
+const placeholder = document.getElementById('placeholder');
+const resultsDiv  = document.getElementById('results');
+
+let selectedFile = null;
+
+// Drag & drop
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', ()=> uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('dragover');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+fileInput.addEventListener('change', ()=> { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+
+function handleFile(f) {
+  selectedFile = f;
+  const url = URL.createObjectURL(f);
+  previewImg.src = url;
+  previewImg.style.display = 'block';
+  previewName.textContent = `${f.name} — ${(f.size/1024).toFixed(1)} KB`;
+  analyzeBtn.disabled = false;
+}
+
+async function runAnalysis() {
+  if (!selectedFile) return;
+  analyzeBtn.disabled = true;
+  spinner.classList.add('active');
+  placeholder.style.display = 'none';
+  resultsDiv.style.display = 'none';
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+
+  try {
+    const resp = await fetch('/analyze', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (data.success) renderResults(data);
+    else showError(data.error || 'Unknown error');
+  } catch(e) {
+    showError('Network error: ' + e.message);
+  } finally {
+    spinner.classList.remove('active');
+    analyzeBtn.disabled = false;
+  }
+}
+
+function showError(msg) {
+  resultsDiv.innerHTML = `<div class="ai-error">⚠ Error: ${escHtml(msg)}</div>`;
+  resultsDiv.style.display = 'block';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sevColor(s) {
+  return {critical:'var(--critical)',high:'var(--high)',medium:'var(--medium)',low:'var(--low)'}[s] || 'var(--muted)';
+}
+
+function renderResults(data) {
+  const r   = data.report;
+  const rb  = r.rule_based_assessment;
+  const ai  = r.ai_analysis;
+  const st  = r.statistics;
+  const dets = r.detections || [];
+  const threat = rb.threat_level;
+
+  let html = '';
+
+  // ── Case header ──────────────────────────────────────────────────────────
+  html += `
+  <div class="results-header">
+    <div class="case-id">CASE-<span>${data.case_id}</span></div>
+    <button class="btn-print" onclick="window.print()">🖨 Print Report</button>
+    <button class="btn-new" onclick="location.reload()">↩ New Analysis</button>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
+    <div class="threat-badge threat-${threat}">
+      <span>⬤</span> THREAT LEVEL: ${threat}
+    </div>
+    <div class="sev-row">
+      <div class="sev-pill sev-critical">${st.critical_count}<span class="sev-label">CRITICAL</span></div>
+      <div class="sev-pill sev-high">${st.high_count}<span class="sev-label">HIGH</span></div>
+      <div class="sev-pill sev-medium">${st.medium_count}<span class="sev-label">MEDIUM</span></div>
+      <div class="sev-pill sev-low">${st.low_count}<span class="sev-label">LOW</span></div>
+    </div>
+  </div>`;
+
+  // ── Visual analysis images ────────────────────────────────────────────────
+  html += `<div class="img-grid">`;
+  if (data.annotated_image) {
+    html += `<div class="img-card">
+      <img src="${data.annotated_image}" alt="Detection Overlay">
+      <div class="img-label">🎯 Detection Overlay</div>
+    </div>`;
+  }
+  if (data.heatmap_image) {
+    html += `<div class="img-card">
+      <img src="${data.heatmap_image}" alt="Evidence Heatmap">
+      <div class="img-label">ℹ Evidence Heatmap</div>
+    </div>`;
+  }
+  if (data.original_image) {
+    html += `<div class="img-card">
+      <img src="${data.original_image}" alt="Original">
+      <div class="img-label">📷 Original Image</div>
+    </div>`;
+  }
+  if (data.evidence_grid) {
+    html += `<div class="img-card">
+      <img src="${data.evidence_grid}" alt="Evidence Grid">
+      <div class="img-label">📋 Evidence Inventory</div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  // ── Detected evidence list ────────────────────────────────────────────────
+  if (dets.length > 0) {
+    html += `<div class="card-title" style="margin-bottom:10px">🔎 Detected Evidence (${dets.length} items)</div>`;
+    html += `<div class="det-list">`;
+    for (const d of dets) {
+      const color = sevColor(d.severity);
+      html += `
+      <div class="det-item">
+        <div class="det-dot" style="background:${color}"></div>
+        <div class="det-name">${escHtml(d.label)}</div>
+        <div class="det-tags">
+          <span class="tag tag-${d.severity}">${d.severity.toUpperCase()}</span>
+          <span class="tag tag-cat">${escHtml(d.category)}</span>
+        </div>
+        <div class="det-conf">
+          ${d.confidence}%
+          <div class="conf-bar" style="margin-top:3px">
+            <div class="conf-fill" style="width:${d.confidence}%;background:${color}"></div>
+          </div>
+        </div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // ── Possible events ───────────────────────────────────────────────────────
+  if (rb.possible_events && rb.possible_events.length > 0) {
+    html += `<div class="card-title" style="margin-bottom:10px">⚡ Possible Events (Rule-Based)</div>`;
+    html += `<div class="events-list">`;
+    for (const ev of rb.possible_events) {
+      const evid = (ev.evidence || []).map(e => `<span class="evid-tag">${escHtml(e)}</span>`).join('');
+      html += `
+      <div class="event-item">
+        <div class="event-top">
+          <span class="event-icon">⚡</span>
+          <span class="event-name">${escHtml(ev.event)}</span>
+          <span class="event-pct">${ev.confidence}%</span>
+        </div>
+        <div class="event-bar"><div class="event-fill" style="width:${ev.confidence}%"></div></div>
+        <div class="event-evid">${evid}</div>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // ── AI Forensic Analysis ──────────────────────────────────────────────────
+  html += `<div class="ai-section">
+    <div class="ai-header">
+      🧠 AI Forensic Analysis
+      <div class="ai-badge">${ai.model ? escHtml(ai.model.toUpperCase()) : 'GROQ LLAMA-4'}</div>
+    </div>`;
+
+  if (ai.success && ai.analysis) {
+    // Convert markdown ## headers to styled h2 inside pre-wrap block
+    let analysisHtml = escHtml(ai.analysis)
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    html += `<div class="ai-body">${analysisHtml}</div>`;
+  } else {
+    const errMsg = ai.error || 'AI analysis unavailable.';
+    html += `<div class="ai-error">⚠ ${escHtml(errMsg)}</div>`;
+  }
+  html += `</div>`;
+
+  resultsDiv.innerHTML = html;
+  resultsDiv.style.display = 'block';
+  resultsDiv.scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+</body>
+</html>

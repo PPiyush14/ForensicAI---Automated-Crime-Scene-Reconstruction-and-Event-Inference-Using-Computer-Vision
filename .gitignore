@@ -1,0 +1,14 @@
+# Virtual environment
+venv/
+__pycache__/
+
+# Large model files (too big for GitHub)
+*.pt
+*.pth
+
+# Environment secrets
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
